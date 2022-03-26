@@ -2,7 +2,7 @@
 #![no_main]
 #![cfg_attr(not(test), no_std)]
 
-use nrf24_rs::config::{DataPipe, NrfConfig, PALevel, PayloadSize};
+use nrf24_rs::config::{NrfConfig, PALevel, PayloadSize};
 use nrf24_rs::Nrf24l01;
 use panic_rtt_target as _;
 use rtt_target::{rprintln, rtt_init_print};
@@ -35,13 +35,12 @@ fn main() -> ! {
         .pclk1(48.MHz())
         .freeze(&mut flash.acr);
 
-    // Setup LED
+    let mut delay = cp.SYST.delay(&clocks);
 
     let mut gpioa = dp.GPIOA.split();
     let gpiob = dp.GPIOB.split();
 
-    let mut delay = cp.SYST.delay(&clocks);
-
+    // Setup SPI
     let sck = gpioa.pa5.into_alternate_push_pull(&mut gpioa.crl);
     let miso = gpioa.pa6;
     let mosi = gpioa.pa7.into_alternate_push_pull(&mut gpioa.crl);
@@ -62,23 +61,25 @@ fn main() -> ! {
 
     let config = NrfConfig::default()
         .channel(8)
-        .pa_level(PALevel::Min)
+        .pa_level(PALevel::Low)
+        .ack_payloads_enabled(true)
         // We will use a payload size the size of our message
         .payload_size(PayloadSize::Static(MESSAGE.len() as u8));
 
-    // Initialize the chip
+    // Initialize the nrf chip
     let mut nrf = Nrf24l01::new(spi, chip_enable, cs, &mut delay, config).unwrap();
     if !nrf.is_connected().unwrap() {
         panic!("Chip is not connected.");
     }
-    nrf.open_reading_pipe(DataPipe::DP0, b"Node1").unwrap();
+    nrf.open_writing_pipe(b"Node1").unwrap();
+    nrf.stop_listening().unwrap();
 
+    rprintln!("Starting tx loop");
     loop {
-        while !nrf.data_available().unwrap() {
-            delay.delay_ms(50u32);
+        while let Err(e) = nrf.write(&mut delay, MESSAGE) {
+            rprintln!("{:?}", e);
+            delay.delay_ms(500u32);
         }
-        let mut buffer = [0; MESSAGE.len()];
-        nrf.read(&mut buffer).unwrap();
-        rprintln!("{:?}", buffer);
+        delay.delay_ms(500u32);
     }
 }
