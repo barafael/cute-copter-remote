@@ -6,8 +6,8 @@ use nrf24_rs::config::{NrfConfig, PALevel, PayloadSize};
 use nrf24_rs::Nrf24l01;
 use panic_rtt_target as _;
 use rtt_target::{rprintln, rtt_init_print};
-use stm32f1xx_hal::pac;
 use stm32f1xx_hal::prelude::*;
+use stm32f1xx_hal::{adc, pac};
 
 mod error;
 use cortex_m_rt::entry;
@@ -55,6 +55,13 @@ fn main() -> ! {
         clocks,
     );
 
+    // Setup analog pins for joysticks
+    let mut adc1 = adc::Adc::adc1(dp.ADC1, clocks);
+    let mut ch0 = gpioa.pa0.into_analog(&mut gpioa.crl);
+    let mut ch1 = gpioa.pa1.into_analog(&mut gpioa.crl);
+    let mut ch2 = gpioa.pa2.into_analog(&mut gpioa.crl);
+    let mut ch3 = gpioa.pa3.into_analog(&mut gpioa.crl);
+
     let (chip_enable, ..) =
         stm32f1xx_hal::afio::MAPR::disable_jtag(&mut afio.mapr, gpioa.pa15, gpiob.pb3, gpiob.pb4);
     let chip_enable = chip_enable.into_push_pull_output(&mut gpioa.crh);
@@ -76,10 +83,17 @@ fn main() -> ! {
 
     rprintln!("Starting tx loop");
     loop {
+        let data0: u16 = adc1.read(&mut ch0).unwrap();
+        let data1: u16 = adc1.read(&mut ch1).unwrap();
+        let data2: u16 = adc1.read(&mut ch2).unwrap();
+        let data3: u16 = adc1.read(&mut ch3).unwrap();
+        rprintln!("{:?}", (data0, data1, data2, data3));
+
         while let Err(e) = nrf.write(&mut delay, MESSAGE) {
             rprintln!("{:?}", e);
-            delay.delay_ms(500u32);
+            delay.delay_ms(50u32);
         }
-        delay.delay_ms(500u32);
+
+        delay.delay_ms(50u32);
     }
 }
