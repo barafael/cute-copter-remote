@@ -2,17 +2,18 @@
 #![no_main]
 #![cfg_attr(not(test), no_std)]
 
+use cortex_m_rt::entry;
+use cute_copter_config_proto::command::Interactive;
+use heapless::Vec;
 use nrf24_rs::config::{NrfConfig, PALevel, PayloadSize};
 use nrf24_rs::Nrf24l01;
 use panic_rtt_target as _;
+use postcard::to_vec;
 use rtt_target::{rprintln, rtt_init_print};
 use stm32f1xx_hal::prelude::*;
-use stm32f1xx_hal::{adc, pac};
-
-mod error;
-use cortex_m_rt::entry;
 use stm32f1xx_hal::spi::Mode as SpiMode;
 use stm32f1xx_hal::spi::Spi;
+use stm32f1xx_hal::{adc, pac};
 
 pub const MODE: SpiMode = nrf24_rs::SPI_MODE;
 const MESSAGE: &[u8; 17] = b"Here's a message!";
@@ -76,24 +77,30 @@ fn main() -> ! {
     // Initialize the nrf chip
     let mut nrf = Nrf24l01::new(spi, chip_enable, cs, &mut delay, config).unwrap();
     if !nrf.is_connected().unwrap() {
-        panic!("Chip is not connected.");
+        panic!("Radio is not connected.");
     }
     nrf.open_writing_pipe(b"Node1").unwrap();
     nrf.stop_listening().unwrap();
 
     rprintln!("Starting tx loop");
-    loop {
-        let data0: u16 = adc1.read(&mut ch0).unwrap();
-        let data1: u16 = adc1.read(&mut ch1).unwrap();
-        let data2: u16 = adc1.read(&mut ch2).unwrap();
-        let data3: u16 = adc1.read(&mut ch3).unwrap();
-        rprintln!("{:?}", (data0, data1, data2, data3));
 
-        while let Err(e) = nrf.write(&mut delay, MESSAGE) {
+    let mut data = Interactive::default();
+
+    loop {
+        data.throttle = adc1.read(&mut ch0).unwrap();
+        data.roll = adc1.read(&mut ch1).unwrap();
+        data.pitch = adc1.read(&mut ch2).unwrap();
+        data.yaw = adc1.read(&mut ch3).unwrap();
+
+        rprintln!("{:?}", data);
+
+        let output: Vec<u8, 8> = to_vec(&data).unwrap();
+
+        while let Err(e) = nrf.write(&mut delay, &output) {
             rprintln!("{:?}", e);
             delay.delay_ms(50u32);
         }
 
-        delay.delay_ms(50u32);
+        delay.delay_ms(20u32);
     }
 }

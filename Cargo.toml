@@ -13,9 +13,6 @@ embedded-hal = "0.2.7"
 panic-rtt-target = { version = "0.1.2", features = ["cortex-m"] }
 rtt-target = { version = "0.3.1", features = ["cortex-m"] }
 nrf24-rs = "0.1.1"
-snafu = { version = "0.7.0", features = [
-    "rust_1_46",
-], default-features = false }
 #cute-copter-config-proto = { path = "../cute-copter-config-proto" }
 cute-copter-config-proto = { git = "https://github.com/barafael/cute-copter-config-proto" }
 postcard = "0.7.3"
